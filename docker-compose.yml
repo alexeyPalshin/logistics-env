@@ -1,0 +1,84 @@
+version: '2.2'
+services:
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: php_service
+    container_name: app
+    restart: always
+    tty: true
+    environment:
+      SERVICE_NAME: app
+      SERVICE_TAGS: dev
+    working_dir: /var/www
+    volumes:
+      - ./src:/var/www
+      - ./configs/php/local.ini:/usr/local/etc/php/conf.d/local.ini
+    networks:
+      - app-network
+      - elastic
+      
+  web:
+    image: nginx
+    container_name: web
+    tty: true
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - ./src:/var/www
+      - ./configs/nginx/conf.d/:/etc/nginx/conf.d/
+    networks:
+      - app-network      
+
+  db:
+    image: mysql:5.7.22
+    command: --default-authentication-plugin=mysql_native_password
+    container_name: db
+    restart: unless-stopped
+    tty: true
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      SERVICE_TAGS: dev
+      SERVICE_NAME: mysql
+    volumes:
+      - dbdata:/var/lib/mysql/
+      - ./configs/mysql/my.cnf:/etc/mysql/my.cnf
+    networks:
+      - app-network
+
+  es:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.6.2
+    container_name: es
+    environment:
+      - node.name=es01
+      - cluster.name=es-docker-cluster
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - discovery.type=single-node
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    ports:
+      - 9200:9200
+    networks:
+      - elastic
+
+volumes:
+  esdata:
+    driver: local
+  dbdata:
+    driver: local
+
+networks:
+  elastic:
+    driver: bridge
+  app-network:
+    driver: bridge
